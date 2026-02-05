@@ -5,7 +5,7 @@ import math
 import os
 import winsound
 import threading
-import time   # <-- needed to control hover sound
+import time
 
 # ============================
 # CLEAN MODERN UI THEME
@@ -29,7 +29,10 @@ class RSAVaultFinal:
         self.root.title("RSA MISSION CONTROL v3.2")
         self.root.geometry("1150x680")
         self.root.configure(bg=BG_COLOR)
-
+        # ====== AUDIO STATE ======
+        self.music_playing = False
+        self.music_muted = False
+        self.music_volume = 0.3   # default volume (30%)
         # State Variables
         self.agent_name = "Unknown Agent"
         self.p = self.q = self.n = self.phi = self.e = self.d = 0
@@ -69,6 +72,53 @@ class RSAVaultFinal:
                 target=lambda: winsound.Beep(2400, 15),
                 daemon=True
             ).start()
+
+    def play_background_music(self):
+        """Play looping background music (built-in Windows only)."""
+        if not self.music_playing:
+            try:
+                winsound.PlaySound(
+                    "background.wav",
+                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP
+                )
+                self.music_playing = True
+            except:
+                print("Music file not found. Please add background.wav")
+
+
+    def toggle_mute(self, btn):
+        if not self.music_muted:
+            winsound.PlaySound(None, winsound.SND_PURGE)
+            self.music_muted = True
+            btn.config(text="🔇")
+        else:
+            self.music_muted = False
+            self.play_background_music()
+            btn.config(text="🔊")
+
+
+
+    def stop_background_music(self):
+        """Stop music when leaving main page."""
+        self.music_playing = False
+        winsound.PlaySound(None, winsound.SND_PURGE)
+
+
+    def update_volume(self, value):
+        """Simulate volume by restarting music at different perceived levels."""
+        self.music_volume = int(value) / 100
+
+        if not self.music_muted:
+            # Stop and restart music (this makes the change feel responsive)
+            winsound.PlaySound(None, winsound.SND_PURGE)
+
+            # If volume is very low, we just don't play sound
+            if self.music_volume > 0.05:
+                winsound.PlaySound(
+                    "background.wav",
+                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_LOOP
+                )
+
 
     def play_click_sound(self):
         """Clear confirmation sound on click."""
@@ -250,6 +300,7 @@ class RSAVaultFinal:
         self.workspace.pack(side="right", expand=True, fill="both")
 
     def abort_mission(self):
+        self.stop_background_music()
         self.timer_running = False
         self.time_spent = 0
         self.setup_welcome_screen()
@@ -264,6 +315,9 @@ class RSAVaultFinal:
         self.difficulty = ""            
         self.current_stage_index = 0
         self.clear_screen()
+        if not self.music_muted:
+            self.play_background_music()
+
 
         # Smooth moving scan line
         self.scan_line = tk.Frame(self.root, bg=ACCENT_GREEN, height=2, width=300)
@@ -291,6 +345,51 @@ class RSAVaultFinal:
             self.root.after(80, animate_particles)
 
         animate_particles()
+
+        # ====== MUSIC CONTROL PANEL (TOP RIGHT) ======
+        audio_panel = tk.Frame(self.root, bg=HIGHLIGHT, padx=10, pady=6)
+        audio_panel.place(relx=0.95, rely=0.05, anchor="ne")
+
+        # Mute / Unmute Button
+        self.mute_btn = tk.Button(
+            audio_panel,
+            text="🔊",
+            bg=BTN_BG,
+            fg=ACCENT_GREEN,
+            font=("Courier New", 12),
+            bd=0,
+            relief="flat",
+            cursor="hand2",
+            command=lambda: self.toggle_mute(self.mute_btn)
+        )
+        self.mute_btn.pack(side="left", padx=5)
+
+        # Volume Label
+        tk.Label(
+            audio_panel,
+            text="VOL",
+            fg=TEXT_SECONDARY,
+            bg=HIGHLIGHT,
+            font=("Courier New", 9)
+        ).pack(side="left", padx=5)
+
+        # Volume Slider (visual control)
+        self.volume_slider = tk.Scale(
+            audio_panel,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            length=120,
+            bg=HIGHLIGHT,
+            fg=ACCENT_GREEN,
+            highlightthickness=0,
+            troughcolor=BTN_BG,
+            showvalue=False,
+            command=self.update_volume
+        )
+
+        self.volume_slider.set(int(self.music_volume * 100))
+        self.volume_slider.pack(side="left")
 
         main_frame = tk.Frame(self.root, bg=BG_COLOR)
         main_frame.place(relx=0.5, rely=0.5, anchor="center")
@@ -340,10 +439,10 @@ class RSAVaultFinal:
         tk.Label(
             card,
             text=(
-                "• Select two prime numbers\n"
-                "• Generate encryption keys\n"
-                "• Encrypt a secret message\n"
-                "• Decrypt it using your private key"
+                "⚙️  Select two prime numbers\n"
+                "🔐  Generate encryption keys\n"
+                "⚙️  Encrypt a secret message\n"
+                "🔓  Decrypt it using your private key"
             ),
             fg=TEXT_PRIMARY,
             bg=HIGHLIGHT,
@@ -351,20 +450,22 @@ class RSAVaultFinal:
             justify="left"
         ).pack(pady=5)
 
+
         btn_row = tk.Frame(main_frame, bg=BG_COLOR)
         btn_row.pack(pady=25)
 
         self.styled_button(btn_row, "▶ INITIATE MISSION", self.agent_id_screen).pack(side="left", padx=12)
         self.styled_button(btn_row, "🏆 VIEW LEADERBOARD", self.show_leaderboard, color=ACCENT_YELLOW).pack(side="left", padx=12)
 
+    
     # ============================
     # AGENT ID
     # ============================
     def agent_id_screen(self):
+        self.stop_background_music()
         self.current_stage_index = 0
         self.clear_screen()
 
-        # === MAIN CONTAINER (CENTER) ===
         cont = tk.Frame(self.root, bg=BG_COLOR)
         cont.place(relx=0.5, rely=0.5, anchor="center")
 
@@ -398,9 +499,9 @@ class RSAVaultFinal:
 
         self.styled_button(cont, "AUTHORIZE ACCESS", self.process_agent_id).pack(pady=10)
 
-        # ====== NEW: BACK TO HOME BUTTON (BOTTOM LEFT) ======
+
         back_btn_frame = tk.Frame(self.root, bg=BG_COLOR)
-        back_btn_frame.place(relx=0.02, rely=0.95, anchor="sw")  # bottom left
+        back_btn_frame.place(relx=0.02, rely=0.95, anchor="sw")
 
         self.styled_button(
             back_btn_frame,
@@ -461,60 +562,112 @@ class RSAVaultFinal:
             "A PRIME number has only two factors: 1 and itself.\n"
             "Examples: 2, 3, 5, 7,\n\n"
             "\n"
-            f"• Enter your own PRIME numbers based on {self.difficulty} level, OR\n"
+            f"• Enter your own PRIME numbers based on {self.difficulty} level  OR\n"
 
             "• Click AUTO-GENERATE to let the system choose."
         )
 
-        input_cont = tk.Frame(self.workspace, bg=BG_COLOR)
-        input_cont.place(relx=0.5, rely=0.5, anchor="center")
-        tk.Label(input_cont, text="PRIME p:", fg=ACCENT_GREEN, bg=BG_COLOR).grid(row=0, column=0, pady=10)
-        vcmd = (self.root.register(self.validate_numeric_input), "%P")
-        self.p_entry = tk.Entry(
-            input_cont,
-            font=("Courier New", 14),
-            bg=BTN_BG,
-            fg="white",
-            validate="key",
-            validatecommand=vcmd
-        )
-        self.p_entry.grid(row=0, column=1, padx=10)
-        tk.Label(input_cont, text="PRIME q:", fg=ACCENT_GREEN, bg=BG_COLOR).grid(row=1, column=0, pady=10)
-        self.q_entry = tk.Entry(
-            input_cont,
-            font=("Courier New", 14),
-            bg=BTN_BG,
-            fg="white",
-            validate="key",
-            validatecommand=vcmd
-        )
-        self.q_entry.grid(row=1, column=1, padx=10)
+        input_card = tk.Frame(self.workspace, bg=HIGHLIGHT, padx=30, pady=25)
+        input_card.place(relx=0.5, rely=0.5, anchor="center")
 
-        self.styled_button(input_cont, "AUTO-GENERATE", self.auto_gen_primes, width=15).grid(row=2, column=0, columnspan=2, pady=20)
-        self.styled_button(input_cont, "VALIDATE", self.validate_primes_input, width=25).grid(row=3, column=0, columnspan=2)
+        tk.Label(
+            input_card,
+            text="🔐 PRIME INPUT TERMINAL",
+            fg=ACCENT_BLUE,
+            bg=HIGHLIGHT,
+            font=("Courier New", 14, "bold")
+        ).pack(pady=(0, 10))
+
+        tk.Frame(input_card, bg=ACCENT_GREEN, height=2, width=350).pack(pady=5)
+
+        tk.Label(
+            input_card,
+            text="Enter two prime numbers",
+            fg=TEXT_PRIMARY,
+            bg=HIGHLIGHT,
+            font=("Courier New", 10)
+        ).pack(pady=8)
+
+        form = tk.Frame(input_card, bg=HIGHLIGHT)
+        form.pack(pady=10)
+
+        vcmd = (self.root.register(self.validate_numeric_input), "%P")
+
+        tk.Label(
+            form, text="PRIME p:",
+            fg=ACCENT_GREEN, bg=HIGHLIGHT,
+            font=("Courier New", 11, "bold")
+        ).grid(row=0, column=0, padx=10, pady=8, sticky="e")
+
+        self.p_entry = tk.Entry(
+            form,
+            font=("Courier New", 14),
+            bg=BTN_BG,
+            fg=ACCENT_GREEN,
+            justify="center",
+            width=20,
+            relief="flat",
+            validate="key",
+            validatecommand=vcmd
+        )
+        self.p_entry.grid(row=0, column=1, padx=10, pady=8)
+
+        tk.Label(
+            form, text="PRIME q:",
+            fg=ACCENT_GREEN, bg=HIGHLIGHT,
+            font=("Courier New", 11, "bold")
+        ).grid(row=1, column=0, padx=10, pady=8, sticky="e")
+
+        self.q_entry = tk.Entry(
+            form,
+            font=("Courier New", 14),
+            bg=BTN_BG,
+            fg=ACCENT_GREEN,
+            justify="center",
+            width=20,
+            relief="flat",
+            validate="key",
+            validatecommand=vcmd
+        )
+        self.q_entry.grid(row=1, column=1, padx=10, pady=8)
+
+        btn_row = tk.Frame(input_card, bg=HIGHLIGHT)
+        btn_row.pack(pady=15)
+
+        self.styled_button(
+            btn_row,
+            "AUTO-GENERATE",
+            self.auto_gen_primes,
+            width=16
+        ).pack(side="left", padx=10)
+
+        self.styled_button(
+            btn_row,
+            "VALIDATE",
+            self.validate_primes_input,
+            color=ACCENT_BLUE,
+            width=16
+        ).pack(side="left", padx=10)
+
 
     def validate_primes_input(self):
         try:
             p_val = int(self.p_entry.get())
             q_val = int(self.q_entry.get())
 
-            # ❌ Prevent negative numbers
             if p_val < 0 or q_val < 0:
                 messagebox.showerror("INPUT ERROR", "Prime numbers cannot be negative.")
                 return
 
-            # ❌ Prevent identical primes
             if p_val == q_val:
                 messagebox.showerror("INPUT ERROR", "p and q must be different primes.")
                 return
 
-            # ✅ Apply difficulty-based validation
             if not self.validate_prime_by_difficulty(p_val):
                 return
             if not self.validate_prime_by_difficulty(q_val):
                 return
 
-            # ✅ Finally check primality
             if self.is_prime(p_val) and self.is_prime(q_val):
                 self.p, self.q = p_val, q_val
                 self.current_stage_index = 3
@@ -589,7 +742,14 @@ class RSAVaultFinal:
         cont = tk.Frame(self.workspace, bg=BG_COLOR)
         cont.place(relx=0.5, rely=0.5, anchor="center")
 
-        self.msg_entry = tk.Entry(cont, font=("Courier New", 18), bg=BTN_BG, fg=ACCENT_GREEN, width=26)
+        self.msg_entry = tk.Entry(
+            cont,
+            font=("Courier New", 18),
+            bg=BTN_BG,
+            fg=ACCENT_GREEN,
+            width=26,
+            justify="center"  
+        )
         self.msg_entry.pack(pady=20)
 
         self.styled_button(cont, "ENCRYPT MESSAGE", self.encrypt_action).pack()
@@ -626,7 +786,6 @@ class RSAVaultFinal:
             font=("Courier New", 12, "bold")
         ).pack(pady=5)
 
-        # ✅ SCROLLABLE TEXT BOX (THIS FIXES OVERFLOW)
         text_frame = tk.Frame(cont, bg=BTN_BG)
         text_frame.pack(pady=10)
 
@@ -646,10 +805,9 @@ class RSAVaultFinal:
         scrollbar.pack(side="right", fill="y")
         text_box.config(yscrollcommand=scrollbar.set)
 
-        # Insert encrypted message nicely formatted
         formatted_msg = ", ".join(map(str, self.encrypted_msg))
         text_box.insert("1.0", formatted_msg)
-        text_box.config(state="disabled")  # make it read-only
+        text_box.config(state="disabled") 
 
         tk.Label(
             cont,
@@ -699,7 +857,6 @@ class RSAVaultFinal:
         cont = tk.Frame(self.workspace, bg=BG_COLOR)
         cont.place(relx=0.5, rely=0.5, anchor="center")
 
-        # ====== ANIMATED TITLE ======
         title = tk.Label(
             cont,
             text="ACCESS GRANTED",
@@ -709,7 +866,6 @@ class RSAVaultFinal:
         )
         title.pack(pady=8)
 
-        # Glow animation for title
         glow_state = {"level": 0}
 
         def animate_title_glow():
@@ -721,7 +877,7 @@ class RSAVaultFinal:
 
         animate_title_glow()
 
-        # ====== SMOOTH GLOWING SWEEP DIVIDER ======
+
         divider_container = tk.Frame(cont, bg=HIGHLIGHT, height=3, width=450)
         divider_container.pack(pady=8)
 
@@ -731,7 +887,7 @@ class RSAVaultFinal:
         glow = {"x": 0, "direction": 1}
 
         def smooth_sweep():
-            # Move glow bar smoothly across the line
+
             new_x = glow["x"] + 8 * glow["direction"]
 
             if new_x > 330:
@@ -742,7 +898,6 @@ class RSAVaultFinal:
             glow["x"] = new_x
             divider.place(x=new_x, y=0)
 
-            # Subtle breathing brightness effect
             brightness = 200 + int(20 * abs(glow["x"] / 330))
             color = f"#00{brightness:02x}66"
             divider.config(bg=color)
@@ -752,7 +907,6 @@ class RSAVaultFinal:
         smooth_sweep()
 
 
-        # ====== LABEL ======
         tk.Label(
             cont,
             text="DECRYPTED MESSAGE",
@@ -761,7 +915,6 @@ class RSAVaultFinal:
             font=("Courier New", 12, "bold")
         ).pack(pady=5)
 
-        # ====== CLEAN MESSAGE BOX ======
         msg_box = tk.Text(
             cont,
             width=65,
@@ -776,7 +929,6 @@ class RSAVaultFinal:
         )
         msg_box.pack(pady=8)
 
-        # ====== TYPEWRITER ANIMATION FOR MESSAGE ======
         def type_text(i=0):
             if i < len(msg):
                 msg_box.insert("end", msg[i])
@@ -786,10 +938,8 @@ class RSAVaultFinal:
 
         type_text()
 
-        # Second divider
         tk.Frame(cont, bg=ACCENT_GREEN, height=2, width=420).pack(pady=8)
 
-        # ====== RETURN BUTTON ======
         self.styled_button(
             cont,
             "RETURN TO MAIN TERMINAL",
@@ -803,6 +953,7 @@ class RSAVaultFinal:
     # ✨ IMPROVED LEADERBOARD ✨
     # ============================
     def show_leaderboard(self):
+        self.stop_background_music()
         self.clear_screen()
 
         header = tk.Label(
@@ -817,7 +968,6 @@ class RSAVaultFinal:
         table_frame = tk.Frame(self.root, bg=BG_COLOR)
         table_frame.pack(expand=True, fill="both", padx=120)
 
-        # ===== TABLE HEADER (PROPER ALIGNMENT) =====
         header_row = tk.Frame(table_frame, bg=HIGHLIGHT)
         header_row.pack(fill="x", pady=5)
 
@@ -833,7 +983,6 @@ class RSAVaultFinal:
         tk.Label(header_row, text="LEVEL", fg=ACCENT_BLUE, bg=HIGHLIGHT,
                 font=("Courier New", 12, "bold"), width=12, anchor="center").pack(side="left")
 
-        # ===== TABLE CONTENT =====
         if os.path.exists(self.leaderboard_file):
             with open(self.leaderboard_file, "r") as f:
                 lines = [l.strip().split(",") for l in f.readlines() if "," in l]
@@ -864,7 +1013,6 @@ class RSAVaultFinal:
                 font=("Courier New", 12)
             ).pack(pady=30)
 
-        # Back button centered neatly
         btn_frame = tk.Frame(self.root, bg=BG_COLOR)
         btn_frame.pack(pady=30)
 
@@ -887,45 +1035,38 @@ class RSAVaultFinal:
         - proper range per difficulty
         """
 
-        # Allow empty (so user can delete)
         if P == "":
             return True
 
-        # Block non-digits
         if not P.isdigit():
             return False
 
         value = int(P)
         digits = len(P)
 
-        # ---- EASY MODE (1–50, max 2 digits) ----
         if self.difficulty == "EASY":
             if digits > 2:
                 return False
-            if value > 50:   # block anything above 50 immediately
+            if value > 50:   
                 return False
-            if value == 0:   # block zero
+            if value == 0:   
                 return False
             return True
 
-        # ---- MEDIUM MODE (50–150, max 3 digits) ----
         elif self.difficulty == "MEDIUM":
             if digits > 3:
                 return False
 
-            # Allow typing while enforcing upper bound only
             if value <= 150:
                 return True
 
             return False
 
 
-        # ---- HARD MODE (150–300, max 3 digits) ----
         elif self.difficulty == "HARD":
             if digits > 3:
                 return False
 
-            # Allow typing while enforcing upper bound only
             if value <= 300:
                 return True
 
@@ -937,8 +1078,7 @@ class RSAVaultFinal:
     def validate_prime_by_difficulty(self, value: int) -> bool:
         """Check digit length + range based on difficulty."""
 
-        # Convert to string to check digit length
-        digits = len(str(abs(value)))  # abs to avoid '-' counting as digit
+        digits = len(str(abs(value))) 
 
         if self.difficulty == "EASY":
             if digits > 2:
@@ -977,7 +1117,7 @@ class RSAVaultFinal:
     def update_timer(self):
         if self.timer_running:
             self.time_left -= 1
-            self.time_spent += 1   # <-- ADD THIS
+            self.time_spent += 1  
 
             if hasattr(self, 'timer_label'):
                 self.timer_label.config(text=f"⏱ {self.time_left}s")
